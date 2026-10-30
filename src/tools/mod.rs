@@ -2,6 +2,8 @@ mod concat;
 mod cut;
 mod export;
 mod probe;
+mod remove;
+mod split;
 
 use crate::tool::ToolRegistry;
 
@@ -11,6 +13,8 @@ pub fn standard_registry() -> ToolRegistry {
     ToolRegistry::new(vec![
         Box::new(probe::ProbeTool),
         Box::new(cut::CutTool),
+        Box::new(split::SplitTool),
+        Box::new(remove::RemoveTool),
         Box::new(concat::ConcatTool),
         Box::new(export::ExportTool),
     ])

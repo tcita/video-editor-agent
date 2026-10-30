@@ -351,7 +351,7 @@ fn system_prompt(registry: &ToolRegistry, session: &Session) -> String {
 - 只能调用下面列出的工具函数。禁止输出 ffmpeg 命令、shell 命令、Python/Rust 等任何代码，禁止尝试其它执行方式。
 - 禁止编造文件路径。素材与片段须引用状态中的 asset_id / clip_id。
 - 所有时间单位均为秒（允许小数）。参数须符合工具 schema，请勿传递多余字段。
-- 典型流程：cut 生成片段 ->（可选）concat 调整顺序 -> export 输出。
+- 典型流程：cut 生成片段 ->（可选）split 拆分 / remove 删除 / concat 调整顺序 -> export 输出。
 - 工具返回“参数不合法”时，请按提示修正参数后重试；其他错误请勿重试，并直接说明情况。
 - 只要时间线非空且用户需要成片，最终须调用 export；请勿仅停留于描述计划。
 - 完成后请用中文简要说明已执行的操作与输出位置。

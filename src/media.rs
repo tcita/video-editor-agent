@@ -264,6 +264,75 @@ impl Session {
         Ok(())
     }
 
+    pub fn split_clip(&mut self, clip_id: &str, offset_sec: f64) -> Result<(String, String)> {
+        guard::check_id("clip_id", clip_id)?;
+        guard::check_time("offset_sec", offset_sec)?;
+        let src = self
+            .clips
+            .get(clip_id)
+            .with_context(|| format!("未知片段：{clip_id}"))?
+            .clone();
+        let duration = src.end_sec - src.start_sec;
+        if offset_sec < 0.05 || duration - offset_sec < 0.05 {
+            return Err(invalid(format!(
+                "offset_sec 须在 0.05 秒至片段时长减 0.05 秒之间（片段时长为 {duration:.2}s，实际为 {offset_sec}）"
+            )));
+        }
+        if self.timeline.len() + 1 > MAX_CLIPS {
+            return Err(invalid(format!("片段数量超出上限 {MAX_CLIPS}")));
+        }
+        let pos = self
+            .timeline
+            .iter()
+            .position(|id| id == clip_id)
+            .with_context(|| format!("片段不在时间线上：{clip_id}"))?;
+
+        let mid = src.start_sec + offset_sec;
+        let first_id = format!("clip_{}", self.next_clip);
+        self.next_clip += 1;
+        let second_id = format!("clip_{}", self.next_clip);
+        self.next_clip += 1;
+        self.clips.insert(
+            first_id.clone(),
+            Clip {
+                id: first_id.clone(),
+                asset_id: src.asset_id.clone(),
+                start_sec: src.start_sec,
+                end_sec: mid,
+            },
+        );
+        self.clips.insert(
+            second_id.clone(),
+            Clip {
+                id: second_id.clone(),
+                asset_id: src.asset_id.clone(),
+                start_sec: mid,
+                end_sec: src.end_sec,
+            },
+        );
+        self.timeline.splice(pos..pos + 1, [first_id.clone(), second_id.clone()]);
+        self.clips.remove(clip_id);
+        Ok((first_id, second_id))
+    }
+
+    pub fn remove_clips(&mut self, ids: &[String]) -> Result<usize> {
+        if ids.is_empty() {
+            return Err(invalid("clip_ids 不允许为空"));
+        }
+        for id in ids {
+            guard::check_id("clip_id", id)?;
+            if !self.clips.contains_key(id) {
+                return Err(invalid(format!("未知片段：{id}")));
+            }
+        }
+        let before = self.timeline.len();
+        self.timeline.retain(|id| !ids.contains(id));
+        for id in ids {
+            self.clips.remove(id);
+        }
+        Ok(before - self.timeline.len())
+    }
+
     pub fn timeline_clips(&self) -> Vec<Clip> {
         self.timeline
             .iter()
