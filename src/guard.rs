@@ -90,6 +90,27 @@ fn sanitize_stem(raw: &str) -> Result<String> {
 /// path; the model only supplies a name. Computes the path without creating any
 /// directory, so the preview step has no side effects.
 pub fn output_path(outdir: &Path, raw_name: Option<&str>) -> Result<PathBuf> {
+    output_path_with_ext(outdir, raw_name, "mp4")
+}
+
+/// Variant of [`output_path`] with an explicit extension (e.g. audio-only
+/// outputs). The extension is sanitized to ASCII alphanumerics.
+pub fn output_path_with_ext(
+    outdir: &Path,
+    raw_name: Option<&str>,
+    ext: &str,
+) -> Result<PathBuf> {
+    let ext = {
+        let e: String = ext
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .collect();
+        if e.is_empty() {
+            "bin".to_string()
+        } else {
+            e.to_lowercase()
+        }
+    };
     let stem = match raw_name {
         Some(n) => sanitize_stem(n)?,
         None => format!(
@@ -102,9 +123,9 @@ pub fn output_path(outdir: &Path, raw_name: Option<&str>) -> Result<PathBuf> {
     };
     for i in 0..100 {
         let name = if i == 0 {
-            format!("{stem}.mp4")
+            format!("{stem}.{ext}")
         } else {
-            format!("{stem}_{i}.mp4")
+            format!("{stem}_{i}.{ext}")
         };
         let candidate = outdir.join(name);
         if !candidate.exists() {

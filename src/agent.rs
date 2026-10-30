@@ -353,7 +353,7 @@ fn system_prompt(registry: &ToolRegistry, session: &Session) -> String {
 - 所有时间单位均为秒（允许小数）。参数须符合工具 schema，请勿传递多余字段。
 - 典型流程：cut 生成片段 ->（可选）split 拆分 / remove 删除 / concat 调整顺序 -> export 输出。
 - 工具返回“参数不合法”时，请按提示修正参数后重试；其他错误请勿重试，并直接说明情况。
-- 只要时间线非空且用户需要成片，最终须调用 export；请勿仅停留于描述计划。
+- 只要时间线非空且用户需要成片，最终须调用 export；如用户需要独立音频，则调用 extract_audio（默认 m4a，用户指定格式时再传 format）；请勿仅停留于描述计划。
 - 完成后请用中文简要说明已执行的操作与输出位置。
 
 当前状态：

@@ -1,6 +1,7 @@
 mod concat;
 mod cut;
 mod export;
+mod extract_audio;
 mod probe;
 mod remove;
 mod split;
@@ -17,5 +18,6 @@ pub fn standard_registry() -> ToolRegistry {
         Box::new(remove::RemoveTool),
         Box::new(concat::ConcatTool),
         Box::new(export::ExportTool),
+        Box::new(extract_audio::ExtractAudioTool),
     ])
 }
