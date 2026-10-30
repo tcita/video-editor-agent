@@ -17,7 +17,7 @@ impl Tool for ProbeTool {
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: "probe",
-            description: "查看当前素材的技术信息（时长、分辨率、帧率、是否有音轨）。无参数；状态里已有时不必调用。",
+            description: "查看当前素材的技术信息（时长、分辨率、帧率、音轨情况）。无参数；若状态中已有则无需调用。",
             parameters: json!({
                 "type": "object",
                 "properties": {},
@@ -32,7 +32,7 @@ impl Tool for ProbeTool {
         }
         let n = session.assets.len();
         Ok(ToolOutcome {
-            summary: format!("probe: 当前 {n} 个素材（详情见状态）"),
+            summary: format!("probe: 当前共 {n} 个素材（详情见状态）"),
         })
     }
 }

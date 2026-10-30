@@ -102,7 +102,7 @@ fn parse_fps(s: &str) -> f64 {
 }
 
 pub async fn probe_path(input: &Path) -> Result<Metadata> {
-    anyhow::ensure!(input.exists(), "输入文件不存在: {}", input.display());
+    anyhow::ensure!(input.exists(), "输入文件不存在：{}", input.display());
     let out = Command::new(ffprobe_bin())
         .args([
             "-v",
@@ -115,14 +115,14 @@ pub async fn probe_path(input: &Path) -> Result<Metadata> {
         .arg(input)
         .output()
         .await
-        .context("ffprobe 执行失败（确认 PATH 里有 ffprobe，或把 ffprobe.exe 放到程序旁边）")?;
+        .context("ffprobe 执行失败（请确认 PATH 中包含 ffprobe，或将 ffprobe.exe 与本程序置于同一目录）")?;
     anyhow::ensure!(
         out.status.success(),
-        "ffprobe 失败: {}",
+        "ffprobe 执行失败：{}",
         String::from_utf8_lossy(&out.stderr)
     );
     let parsed: FfprobeOut =
-        serde_json::from_slice(&out.stdout).context("ffprobe JSON 解析失败")?;
+        serde_json::from_slice(&out.stdout).context("ffprobe 输出的 JSON 解析失败")?;
 
     let duration_sec = parsed
         .format
@@ -141,7 +141,7 @@ pub async fn probe_path(input: &Path) -> Result<Metadata> {
         .streams
         .iter()
         .find(|s| s.codec_type.as_deref() == Some("video"))
-        .context("无视频流")?;
+        .context("未检测到视频流")?;
 
     let audio = parsed
         .streams
@@ -163,7 +163,7 @@ impl Session {
         // `absolute` rather than `canonicalize`: the latter adds a `\\?\` prefix
         // on Windows. ffmpeg copes with it, but it is ugly in logs and previews.
         let input = std::path::absolute(input)
-            .with_context(|| format!("解析输入路径失败: {}", input.display()))?;
+            .with_context(|| format!("解析输入路径失败：{}", input.display()))?;
         let workdir = input
             .parent()
             .unwrap_or_else(|| Path::new("."))
@@ -201,7 +201,7 @@ impl Session {
     pub fn asset(&self, id: &str) -> Result<&Asset> {
         self.assets
             .get(id)
-            .with_context(|| format!("未知素材 {id}"))
+            .with_context(|| format!("未知素材：{id}"))
     }
 
     pub fn add_clip(&mut self, asset_id: &str, start: f64, end: f64) -> Result<String> {
@@ -210,25 +210,25 @@ impl Session {
         guard::check_time("end_sec", end)?;
         if end <= start {
             return Err(invalid(format!(
-                "end_sec 必须大于 start_sec（收到 {start} -> {end}）"
+                "end_sec 须大于 start_sec（实际为 {start} -> {end}）"
             )));
         }
         if end - start < 0.05 {
-            return Err(invalid("片段太短（至少 0.05 秒）"));
+            return Err(invalid("片段时长过短（最短为 0.05 秒）"));
         }
         if self.timeline.len() >= MAX_CLIPS {
-            return Err(invalid(format!("时间线片段数已达上限 {MAX_CLIPS}")));
+            return Err(invalid(format!("时间线片段数量已达上限 {MAX_CLIPS}")));
         }
 
         let duration = self.asset(asset_id)?.meta.duration_sec;
         if start > duration {
             return Err(invalid(format!(
-                "start_sec({start}) 超出素材时长({duration:.2}s)"
+                "start_sec（{start}）超出素材时长（{duration:.2}s）"
             )));
         }
         if end > duration + 0.5 {
             return Err(invalid(format!(
-                "end_sec({end}) 超出素材时长({duration:.2}s)"
+                "end_sec（{end}）超出素材时长（{duration:.2}s）"
             )));
         }
 
@@ -249,15 +249,15 @@ impl Session {
 
     pub fn set_timeline(&mut self, ids: Vec<String>) -> Result<()> {
         if ids.is_empty() {
-            return Err(invalid("clip_ids 不能为空"));
+            return Err(invalid("clip_ids 不允许为空"));
         }
         if ids.len() > MAX_CLIPS {
-            return Err(invalid(format!("片段数超过上限 {MAX_CLIPS}")));
+            return Err(invalid(format!("片段数量超出上限 {MAX_CLIPS}")));
         }
         for id in &ids {
             guard::check_id("clip_id", id)?;
             if !self.clips.contains_key(id) {
-                return Err(invalid(format!("未知片段 {id}")));
+                return Err(invalid(format!("未知片段：{id}")));
             }
         }
         self.timeline = ids;
@@ -296,14 +296,14 @@ impl Session {
                 a.meta.height,
                 a.meta.fps,
                 if a.meta.has_audio {
-                    "有音轨"
+                    "含音轨"
                 } else {
                     "无音轨"
                 }
             ));
         }
         if self.timeline.is_empty() {
-            lines.push("时间线: 空".into());
+            lines.push("时间线：空".into());
         } else {
             let items: Vec<String> = self
                 .timeline_clips()
@@ -316,17 +316,17 @@ impl Session {
                 })
                 .collect();
             lines.push(format!(
-                "时间线({} 段, {:.1}s): {}",
+                "时间线（{} 段，{:.1}s）：{}",
                 items.len(),
                 self.timeline_duration(),
                 items.join(" -> ")
             ));
         }
         if self.outputs.is_empty() {
-            lines.push("输出: 无".into());
+            lines.push("输出：无".into());
         } else {
             lines.push(format!(
-                "输出: {}",
+                "输出：{}",
                 self.outputs
                     .iter()
                     .map(|p| p.display().to_string())

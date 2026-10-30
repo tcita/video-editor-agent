@@ -21,21 +21,21 @@ impl Tool for CutTool {
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: "cut",
-            description: "从素材剪出一个片段，并追加到时间线末尾。时间单位是秒，0 <= start_sec < end_sec <= 素材时长。",
+            description: "从素材中剪取一个片段，并追加至时间线末尾。时间单位为秒，须满足 0 <= start_sec < end_sec <= 素材时长。",
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "asset_id": {
                         "type": "string",
-                        "description": "素材 id，例如 asset_0（见状态）"
+                        "description": "素材 ID，例如 asset_0（见状态）"
                     },
                     "start_sec": {
                         "type": "number",
-                        "description": "起始秒，>= 0"
+                        "description": "起始时间（秒），须 >= 0"
                     },
                     "end_sec": {
                         "type": "number",
-                        "description": "结束秒，必须大于 start_sec"
+                        "description": "结束时间（秒），须大于 start_sec"
                     }
                 },
                 "required": ["asset_id", "start_sec", "end_sec"],
@@ -57,7 +57,7 @@ impl Tool for CutTool {
         let total = session.timeline_duration();
         Ok(ToolOutcome {
             summary: format!(
-                "cut: 追加 {clip_id} = {}[{:.1}-{:.1}]（时间线现有 {n} 段，共 {total:.1}s）",
+                "cut: 已追加 {clip_id} = {}[{:.1}-{:.1}]（时间线现有 {n} 段，共 {total:.1}s）",
                 a.asset_id, a.start_sec, a.end_sec
             ),
         })

@@ -35,7 +35,7 @@ pub const MAX_RES: u32 = 7680;
 
 pub fn check_time(name: &str, v: f64) -> Result<()> {
     if !v.is_finite() || v < 0.0 {
-        return Err(invalid(format!("{name} 必须是非负有限数字（收到 {v}）")));
+        return Err(invalid(format!("{name} 须为非负有限数字（实际为 {v}）")));
     }
     Ok(())
 }
@@ -45,7 +45,7 @@ pub fn check_id(name: &str, v: &str) -> Result<()> {
         !v.is_empty() && v.len() <= 40 && v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_');
     if !ok {
         return Err(invalid(format!(
-            "{name} 不合法（只允许字母、数字、下划线，长度 1..=40）"
+            "{name} 不合法（仅允许字母、数字与下划线，长度为 1..=40）"
         )));
     }
     Ok(())
@@ -54,17 +54,17 @@ pub fn check_id(name: &str, v: &str) -> Result<()> {
 pub fn parse_resolution(s: &str) -> Result<(u32, u32)> {
     let (w, h) = s
         .split_once(['x', 'X'])
-        .with_context(|| format!("分辨率格式应为 宽x高（例如 1920x1080），收到 {s}"))?;
+        .with_context(|| format!("分辨率格式须为 宽x高（例如 1920x1080），实际为 {s}"))?;
     let w: u32 = w
         .trim()
         .parse()
-        .with_context(|| format!("分辨率宽度非法: {s}"))?;
+        .with_context(|| format!("分辨率宽度不合法: {s}"))?;
     let h: u32 = h
         .trim()
         .parse()
-        .with_context(|| format!("分辨率高度非法: {s}"))?;
+        .with_context(|| format!("分辨率高度不合法: {s}"))?;
     if !(16..=MAX_RES).contains(&w) || !(16..=MAX_RES).contains(&h) {
-        return Err(invalid(format!("分辨率超出范围 16..={MAX_RES}")));
+        return Err(invalid(format!("分辨率超出允许范围 16..={MAX_RES}")));
     }
     Ok((w & !1, h & !1))
 }
@@ -81,7 +81,7 @@ fn sanitize_stem(raw: &str) -> Result<String> {
         .collect();
     let cleaned = cleaned.trim().trim_matches('.').trim();
     if cleaned.is_empty() {
-        return Err(invalid("输出文件名不合法（清洗后为空）"));
+        return Err(invalid("输出文件名不合法（清理后为空）"));
     }
     Ok(cleaned.chars().take(60).collect())
 }
@@ -111,5 +111,5 @@ pub fn output_path(outdir: &Path, raw_name: Option<&str>) -> Result<PathBuf> {
             return Ok(candidate);
         }
     }
-    Err(crate::error::fatal("同名输出文件过多，请换一个名字"))
+    Err(crate::error::fatal("同名输出文件过多，请更换名称后重试"))
 }

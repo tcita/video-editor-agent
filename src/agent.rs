@@ -91,12 +91,12 @@ impl LlmClient {
 
 /// Once the step budget is gone: disable tools and force a text-only summary.
 const MAX_STEPS_PROMPT: &str = "\
-你已经用完了本次任务允许的工具调用次数，工具已禁用。
-现在只输出一段中文总结，不要再调用任何工具。总结必须包含：
-1. 已经完成的工作
+本轮任务允许的工具调用次数已耗尽，工具已禁用。
+仅输出一段中文总结，不再调用任何工具。总结须包含：
+1. 已完成的工作
 2. 尚未完成的部分
-3. 建议的下一步
-这条指令覆盖其它所有要求。";
+3. 建议的后续步骤
+本指令覆盖其他所有要求。";
 
 pub async fn run_turn(
     client: &LlmClient,
@@ -127,7 +127,7 @@ pub async fn run_turn(
 
     log.line(
         "TURN",
-        &format!("---------- 新回合 · 预算 {max_steps} 步 ----------"),
+        &format!("---------- 新一轮 · 预算 {max_steps} 步 ----------"),
     );
     log.line("PROMPT", user_request);
 
@@ -148,12 +148,12 @@ pub async fn run_turn(
         if step >= tool_steps {
             say(
                 "BUDGET",
-                format!("步数预算用尽（{tool_steps} 轮工具 + 1 轮收尾），转为文字总结"),
+                format!("步骤预算已耗尽（{tool_steps} 轮工具调用与 1 轮收尾），转为文字总结"),
             );
             let mut prompt = MAX_STEPS_PROMPT.to_string();
             if !session.timeline.is_empty() && session.outputs.is_empty() {
                 prompt.push_str(&format!(
-                    "\n补充：时间线已有 {} 段（合计 {:.1}s），但还没有导出任何文件。请在总结里说明是否需要继续导出。",
+                    "\n补充说明：时间线已有 {} 段（合计 {:.1}s），但尚未导出任何文件。请在总结中说明是否需要继续导出。",
                     session.timeline.len(),
                     session.timeline_duration()
                 ));
@@ -180,7 +180,7 @@ pub async fn run_turn(
             .map(str::trim)
             .filter(|s| !s.is_empty())
         {
-            say("THINK", format!("思考: {r}"));
+            say("THINK", format!("思考：{r}"));
         }
         let calls = msg
             .get("tool_calls")
@@ -201,7 +201,7 @@ pub async fn run_turn(
         //     TUI checkmark), so do not duplicate it
         if !calls.is_empty() {
             if let Some(c) = text {
-                say("MODEL", format!("模型: {c}"));
+                say("MODEL", format!("模型：{c}"));
             }
         }
 
@@ -228,13 +228,13 @@ pub async fn run_turn(
                 // Interrupted by the reminder and never returned as the final
                 // answer, so log it here.
                 if let Some(c) = text {
-                    say("MODEL", format!("模型: {c}"));
+                    say("MODEL", format!("模型：{c}"));
                 }
                 messages.push(json!({
                     "role": "user",
                     "content": format!(
-                        "时间线目前有 {} 段（合计 {:.1}s），但还没有导出任何文件。\n\
-                         如果用户需要成片，请调用 export 导出；如果用户只是要计划或暂不导出，请用一句话说明原因后结束。",
+                        "时间线当前包含 {} 段（合计 {:.1}s），但尚未导出任何文件。\n\
+                         若用户需要成片，请调用 export 导出；若用户仅需方案或暂不导出，请用一句话说明原因后结束。",
                         session.timeline.len(),
                         session.timeline_duration()
                     )
@@ -277,11 +277,11 @@ pub async fn run_turn(
                     Err(e) => {
                         let msg = format!("{e:#}");
                         if e.downcast_ref::<InvalidArg>().is_some() {
-                            say("INVALID", format!("  !! 参数不合法: {msg}"));
-                            (format!("错误（参数不合法，改参数后可重试）: {msg}"), None)
+                            say("INVALID", format!("参数不合法：{msg}"));
+                            (format!("错误（参数不合法，修正参数后可重试）：{msg}"), None)
                         } else {
-                            say("ERROR", format!("  !! 致命错误: {msg}"));
-                            (format!("错误（已停止，不要重试）: {msg}"), Some(msg))
+                            say("ERROR", format!("致命错误：{msg}"));
+                            (format!("错误（已停止，请勿重试）：{msg}"), Some(msg))
                         }
                     }
                 };
@@ -299,10 +299,10 @@ pub async fn run_turn(
                     messages.push(json!({
                         "role": "tool",
                         "tool_call_id": rest.get("id").and_then(Value::as_str).unwrap_or_default(),
-                        "content": "已跳过：上一条工具调用出现致命错误，本轮已停止。",
+                        "content": "已跳过：上一条工具调用发生致命错误，本轮已终止。",
                     }));
                 }
-                let out = format!("因工具出现致命错误而停止：{reason}");
+                let out = format!("因工具发生致命错误而终止：{reason}");
                 log.line("FINAL", &out);
                 return Ok(out);
             }
@@ -322,13 +322,13 @@ async fn run_one(
 ) -> Result<crate::tool::ToolOutcome> {
     if args_str.len() > MAX_ARGS_BYTES {
         return Err(crate::error::invalid(format!(
-            "参数过长（{} 字节，上限 {MAX_ARGS_BYTES}）",
+            "参数过长（实际为 {} 字节，上限为 {MAX_ARGS_BYTES} 字节）",
             args_str.len()
         )));
     }
     if !registry.contains(name) {
         return Err(crate::error::invalid(format!(
-            "未知工具「{name}」。只能使用: {}",
+            "未知工具「{name}」，可用工具为：{}",
             registry.names().join(", ")
         )));
     }
@@ -349,12 +349,12 @@ fn system_prompt(registry: &ToolRegistry, session: &Session) -> String {
 
 硬性规则（必须遵守）：
 - 只能调用下面列出的工具函数。禁止输出 ffmpeg 命令、shell 命令、Python/Rust 等任何代码，禁止尝试其它执行方式。
-- 禁止编造文件路径。素材和片段只能用状态里的 asset_id / clip_id 引用。
-- 所有时间单位是秒（小数）。参数必须符合工具 schema，不要传多余字段。
+- 禁止编造文件路径。素材与片段须引用状态中的 asset_id / clip_id。
+- 所有时间单位均为秒（允许小数）。参数须符合工具 schema，请勿传递多余字段。
 - 典型流程：cut 生成片段 ->（可选）concat 调整顺序 -> export 输出。
-- 工具报“参数不合法”时按提示修正参数后重试；其它错误不要再重试，直接说明情况。
-- 只要时间线非空且用户需要成片，最后必须调用 export；不要停在只描述计划。
-- 完成后用中文简短说明做了哪些操作、输出在哪。
+- 工具返回“参数不合法”时，请按提示修正参数后重试；其他错误请勿重试，并直接说明情况。
+- 只要时间线非空且用户需要成片，最终须调用 export；请勿仅停留于描述计划。
+- 完成后请用中文简要说明已执行的操作与输出位置。
 
 当前状态：
 {}

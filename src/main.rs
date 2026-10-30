@@ -25,9 +25,9 @@ const USAGE: &str = "\
   -p, --prompt <需求>   一次性执行后退出（自动化 / 脚本用）
   -h, --help            显示本帮助
 
-注意: stdin 管道已禁用。Windows PowerShell 5.1 会按 ASCII 重编码管道内容，
-      中文在到达本程序之前就已经变成 ? 了，无法检测也无法还原。
-      自动化请用 -p，从文件读需求：
+注意: 已禁用 stdin 管道。Windows PowerShell 5.1 会按 ASCII 重编码管道内容，
+      中文在到达本程序前已变为 ?，无法检测也无法还原。
+      自动化场景请使用 -p，并从文件读取需求：
         video-agent a.mp4 -p (Get-Content req.txt -Raw -Encoding UTF8)
 ";
 
@@ -48,11 +48,11 @@ fn get_key() -> Result<String> {
             "[Environment]::GetEnvironmentVariable('deepseek_key','User')",
         ])
         .output()
-        .context("读取 User 级 deepseek_key 失败")?;
+        .context("读取用户级环境变量 deepseek_key 失败")?;
     let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
     anyhow::ensure!(
         !v.is_empty(),
-        "没找到 deepseek_key（Process 和 User 级都没有）"
+        "未找到 deepseek_key（进程级与用户级环境变量均不存在）"
     );
     Ok(v)
 }
@@ -80,15 +80,15 @@ async fn main() -> Result<()> {
                 return Ok(());
             }
             "-p" | "--prompt" => {
-                let value = it.next().context("-p 后面需要一个需求字符串")?;
-                anyhow::ensure!(prompt.is_none(), "-p 只能给一次");
+                let value = it.next().context("缺少参数：-p 后须提供需求字符串")?;
+                anyhow::ensure!(prompt.is_none(), "-p 仅允许提供一次");
                 prompt = Some(value);
             }
             other if other.starts_with('-') => anyhow::bail!("未知参数 {other}\n\n{USAGE}"),
             other => {
                 if let Some(first) = &video {
                     anyhow::bail!(
-                        "暂只支持一个视频（已收到 {}，又收到 {other}）\n\n{USAGE}",
+                        "当前仅支持单个视频（已指定 {}，又指定 {other}）\n\n{USAGE}",
                         first.display()
                     );
                 }
@@ -98,7 +98,7 @@ async fn main() -> Result<()> {
     }
 
     let Some(input) = video else {
-        anyhow::bail!("没有指定视频\n\n{USAGE}");
+        anyhow::bail!("未指定视频\n\n{USAGE}");
     };
 
     // No stdin support on purpose: a Windows PowerShell 5.1 pipe re-encodes the
@@ -107,10 +107,10 @@ async fn main() -> Result<()> {
     let prompt = match prompt {
         Some(p) => Some(p.trim().to_string()),
         None if std::io::stdin().is_terminal() => None,
-        None => anyhow::bail!("没有需求：请用 -p \"<需求>\"\n\n{USAGE}"),
+        None => anyhow::bail!("缺少需求：请使用 -p \"<需求>\" 提供\n\n{USAGE}"),
     };
     if let Some(p) = &prompt {
-        anyhow::ensure!(!p.is_empty(), "需求为空（-p 给的是空白）");
+        anyhow::ensure!(!p.is_empty(), "需求为空（-p 提供的值为空白）");
     }
 
     let key = get_key()?;
@@ -164,7 +164,7 @@ async fn main() -> Result<()> {
         println!("\n{}", final_text.trim());
     }
     if session.outputs.is_empty() {
-        println!("\n（本次没有生成文件）");
+        println!("\n（本次未生成文件）");
     } else {
         for p in &session.outputs {
             println!("\n输出: {}", p.display());

@@ -63,11 +63,11 @@ pub struct ExportTool;
 impl ExportTool {
     fn build_plan(session: &Session, a: &Args) -> Result<RenderPlan> {
         if session.timeline.is_empty() {
-            return Err(invalid("时间线为空：先用 cut 添加片段"));
+            return Err(invalid("时间线为空：请先使用 cut 添加片段"));
         }
         if session.timeline.len() > guard::MAX_CLIPS {
             return Err(invalid(format!(
-                "时间线片段数超过上限 {}",
+                "时间线片段数量超出上限 {}",
                 guard::MAX_CLIPS
             )));
         }
@@ -77,17 +77,17 @@ impl ExportTool {
             let c = session
                 .clips
                 .get(id)
-                .with_context(|| format!("时间线引用了不存在的片段 {id}"))?;
+                .with_context(|| format!("时间线引用了不存在的片段：{id}"))?;
             if !session.assets.contains_key(&c.asset_id) {
                 return Err(invalid(format!(
-                    "片段 {id} 引用了不存在的素材 {}",
+                    "片段 {id} 引用的素材不存在：{}",
                     c.asset_id
                 )));
             }
             clips.push(c.clone());
         }
 
-        let first = session.assets.get(&clips[0].asset_id).context("素材丢失")?;
+        let first = session.assets.get(&clips[0].asset_id).context("素材缺失")?;
 
         let (mut width, mut height) = match a.resolution.as_deref() {
             Some(r) => guard::parse_resolution(r)?,
@@ -146,20 +146,20 @@ impl Tool for ExportTool {
                 "properties": {
                     "output_name": {
                         "type": "string",
-                        "description": "输出文件名（会自动清洗并放到 _out 目录，可省略）"
+                        "description": "输出文件名（将自动规范化并置于 _out 目录，可省略）"
                     },
                     "quality": {
                         "type": "string",
                         "enum": ["high", "balanced", "small"],
-                        "description": "画质/体积取舍，默认 balanced"
+                        "description": "画质与体积的取舍，默认为 balanced"
                     },
                     "resolution": {
                         "type": "string",
-                        "description": "输出分辨率，格式 宽x高，例如 1920x1080；省略则沿用第一个片段"
+                        "description": "输出分辨率，格式为 宽x高，例如 1920x1080；省略则沿用首个片段"
                     },
                     "include_audio": {
                         "type": "boolean",
-                        "description": "是否保留音轨，默认 true；缺少音轨的片段会自动补静音"
+                        "description": "是否保留音轨，默认为 true；缺失音轨的片段将自动补充静音"
                     }
                 },
                 "additionalProperties": false
@@ -171,14 +171,14 @@ impl Tool for ExportTool {
         let (_, p) = Self::parse(session, args)?;
         let total: f64 = p.clips.iter().map(Clip::duration).sum();
         Ok(format!(
-            "导出 {} 个片段，总时长 {:.1}s，{}x{} @ {:.0}fps，质量 {}，音轨 {}，输出 {}",
+            "导出 {} 个片段，总时长 {:.1}s，{}x{} @ {:.0}fps，质量 {}，{}，输出 {}",
             p.clips.len(),
             total,
             p.width,
             p.height,
             p.fps,
             p.quality.label(),
-            if p.include_audio { "保留" } else { "移除" },
+            if p.include_audio { "保留音轨" } else { "移除音轨" },
             p.out_path.display()
         ))
     }
@@ -186,7 +186,7 @@ impl Tool for ExportTool {
     async fn run(&self, session: &mut Session, args: Value) -> Result<ToolOutcome> {
         let (_, plan) = Self::parse(session, &args)?;
         std::fs::create_dir_all(&session.outdir)
-            .with_context(|| format!("创建输出目录失败: {}", session.outdir.display()))?;
+            .with_context(|| format!("创建输出目录失败：{}", session.outdir.display()))?;
 
         let n = plan.clips.len();
         let mut cmd = Command::new(ffmpeg_bin());
@@ -196,7 +196,7 @@ impl Tool for ExportTool {
             let asset = session
                 .assets
                 .get(&c.asset_id)
-                .with_context(|| format!("素材丢失: {}", c.asset_id))?;
+                .with_context(|| format!("素材缺失：{}", c.asset_id))?;
             cmd.arg("-ss")
                 .arg(format!("{:.3}", c.start_sec))
                 .arg("-t")
@@ -210,7 +210,7 @@ impl Tool for ExportTool {
             let asset = session
                 .assets
                 .get(&c.asset_id)
-                .with_context(|| format!("素材丢失: {}", c.asset_id))?;
+                .with_context(|| format!("素材缺失：{}", c.asset_id))?;
             chains.push(format!(
                 "[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,\
                  pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,\
@@ -287,13 +287,13 @@ impl Tool for ExportTool {
             // Environment-level failure: retrying with different arguments is
             // pointless.
             return Err(fatal(format!(
-                "ffmpeg 失败:\n{}",
+                "ffmpeg 执行失败：\n{}",
                 ffmpeg_error(&out.stderr)
             )));
         }
         if !plan.out_path.exists() {
             return Err(fatal(format!(
-                "ffmpeg 返回成功但没有生成文件: {}",
+                "ffmpeg 返回成功，但未生成文件：{}",
                 plan.out_path.display()
             )));
         }
@@ -430,11 +430,11 @@ mod tests {
         assert!(out.summary.starts_with("export: 已导出"));
 
         let path = session.outputs.last().unwrap();
-        assert!(Path::new(path).exists(), "输出不存在: {}", path.display());
+        assert!(Path::new(path).exists(), "输出文件不存在：{}", path.display());
         let m = probe_path(Path::new(path)).await.unwrap();
         assert!(
             (m.duration_sec - 2.0).abs() < 0.3,
-            "时长 {}",
+            "时长异常：{}",
             m.duration_sec
         );
         assert_eq!(m.width, 320);

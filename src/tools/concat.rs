@@ -20,14 +20,14 @@ impl Tool for ConcatTool {
     fn spec(&self) -> ToolSpec {
         ToolSpec {
             name: "concat",
-            description: "按 clip_ids 的顺序重排时间线。省略 clip_ids 时保持当前顺序。clip_id 必须已经用 cut 创建。",
+            description: "按 clip_ids 的顺序重排时间线。省略 clip_ids 时保持当前顺序。clip_id 须已通过 cut 创建。",
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "clip_ids": {
                         "type": "array",
                         "items": { "type": "string" },
-                        "description": "按播放顺序排列的 clip_id 列表；可省略"
+                        "description": "按播放顺序排列的 clip_id 列表，可省略"
                     }
                 },
                 "additionalProperties": false
@@ -51,7 +51,7 @@ impl Tool for ConcatTool {
                 if session.timeline.is_empty() {
                     return Err(invalid_args(
                         "concat",
-                        "时间线为空：先用 cut 添加片段",
+                        "时间线为空：请先使用 cut 添加片段",
                         &args,
                     ));
                 }

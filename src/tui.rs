@@ -117,7 +117,7 @@ async fn event_loop(
                 AppMsg::Done(text) => {
                     let text = text.trim();
                     if text.is_empty() {
-                        app.push("✅ 完成");
+                        app.push("✅ 已完成");
                     } else {
                         app.push(format!("✅ {text}"));
                     }
@@ -183,7 +183,7 @@ async fn event_loop(
             let input = Paragraph::new(app.req_text.as_str()).block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" 需求（Enter 发送） "),
+                    .title(" 需求（按 Enter 发送） "),
             );
             f.render_widget(input, chunks[2]);
             if matches!(app.phase, Phase::Editing) {
@@ -193,7 +193,7 @@ async fn event_loop(
                 ));
             }
 
-            let hint = " ↑↓滚屏 · Esc清空/退出 · Ctrl+C退出 ";
+            let hint = " ↑/↓ 滚动 · Esc 清空/退出 · Ctrl+C 退出 ";
             f.render_widget(Paragraph::new(hint), chunks[3]);
         })?;
 
@@ -229,7 +229,7 @@ async fn event_loop(
                                 continue;
                             }
                             app.req_text.clear();
-                            app.push(format!("你: {req}"));
+                            app.push(format!("你：{req}"));
                             app.phase = Phase::Busy("思考中…".into());
 
                             let session = Arc::clone(&session);

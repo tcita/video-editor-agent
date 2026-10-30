@@ -87,14 +87,14 @@ impl ToolRegistry {
     ) -> Result<ToolOutcome> {
         let Some(tool) = self.get(name) else {
             return Err(crate::error::invalid(format!(
-                "未知工具「{name}」。只能使用: {}",
+                "未知工具「{name}」，可用工具为：{}",
                 self.names().join(", ")
             )));
         };
         let plan = tool.plan(ctx.session, &args)?;
         if !plan.is_empty() {
             ctx.log.line("PLAN", &plan);
-            ctx.host.log(format!("计划: {plan}"));
+            ctx.host.log(format!("计划：{plan}"));
         }
         tool.run(ctx.session, args).await
     }
