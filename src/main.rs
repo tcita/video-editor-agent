@@ -18,14 +18,15 @@ use runlog::RunLog;
 
 const USAGE: &str = "\
 用法:
-  video-agent <视频路径>                          交互模式（默认）
-  video-agent -p \"<自然语言需求>\" <视频路径>       一次性执行后退出
+  video-agent \"<视频路径>\"                        交互模式（默认）
+  video-agent -p \"<自然语言需求>\" \"<视频路径>\"     一次性执行后退出
 
 选项:
   -p, --prompt <需求>   一次性执行后退出（自动化 / 脚本用）
   -h, --help            显示本帮助
 
-注意: 已禁用 stdin 管道。Windows PowerShell 5.1 会按 ASCII 重编码管道内容，
+注意: 视频路径请用引号包裹，避免空格导致解析错误。
+      已禁用 stdin 管道。Windows PowerShell 5.1 会按 ASCII 重编码管道内容，
       中文在到达本程序前已变为 ?，无法检测也无法还原。
       自动化场景请使用 -p，并从文件读取需求：
         video-agent a.mp4 -p (Get-Content req.txt -Raw -Encoding UTF8)
@@ -88,7 +89,7 @@ async fn main() -> Result<()> {
             other => {
                 if let Some(first) = &video {
                     anyhow::bail!(
-                        "当前仅支持单个视频（已指定 {}，又指定 {other}）\n\n{USAGE}",
+                        "当前仅支持单个视频（已指定 {}，又指定 {other}）\n{USAGE}",
                         first.display()
                     );
                 }

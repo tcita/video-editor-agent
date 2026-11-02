@@ -14,6 +14,12 @@ pub trait AgentHost: Send + Sync {
     fn state(&self, _summary: String) {}
 }
 
+/// Default upstream. Constants corral the magic strings while single-provider;
+/// a Config/Provider abstraction replaces this layer for multi-provider support.
+const DEFAULT_BASE_URL: &str = "https://api.deepseek.com";
+const DEFAULT_MODEL: &str = "deepseek-flash";
+const CHAT_COMPLETIONS_PATH: &str = "/chat/completions";
+
 pub struct LlmClient {
     endpoint: String,
     key: String,
@@ -25,15 +31,15 @@ pub struct LlmClient {
 
 impl LlmClient {
     pub fn from_env(key: String, log: Arc<RunLog>) -> Result<Self> {
-        let base = std::env::var("VIDEO_AGENT_BASE_URL")
-            .unwrap_or_else(|_| "https://api.deepseek.com".to_string());
-        let endpoint = if base.ends_with("/chat/completions") {
+        let base =
+            std::env::var("VIDEO_AGENT_BASE_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string());
+        let endpoint = if base.ends_with(CHAT_COMPLETIONS_PATH) {
             base
         } else {
-            format!("{}/chat/completions", base.trim_end_matches('/'))
+            format!("{}{CHAT_COMPLETIONS_PATH}", base.trim_end_matches('/'))
         };
         let model =
-            std::env::var("VIDEO_AGENT_MODEL").unwrap_or_else(|_| "deepseek-flash".to_string());
+            std::env::var("VIDEO_AGENT_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_string());
         let http_client = reqwest::Client::builder()
             .timeout(Duration::from_secs(180))
             .build()
@@ -285,11 +291,10 @@ pub async fn run_turn(
                         }
                     }
                 };
-            messages.push(json!({
-                "role": "tool",
-                "tool_call_id": call_id,
-                "content": content,
-            }));
+            // The tool content sent back to the model carries fresh state (suffix
+            // growth, so the cached prefix stays intact); the log/TUI keeps the
+            // clean one-line summary from say() above.
+            messages.push(tool_message(&call_id, &content, session));
             host.state(session.summary());
 
             if let Some(reason) = fatal {
@@ -371,4 +376,67 @@ fn truncate(s: &str, max: usize) -> String {
     }
     let head: String = s.chars().take(max).collect();
     format!("{head}…")
+}
+
+/// Tool message sent to the model: one-line summary plus fresh state. The system
+/// section is a cache prefix and must not be rewritten every step; state rides
+/// the suffix so the prefix still hits, and the model sees the map right before
+/// its next decision.
+fn tool_message(call_id: &str, content: &str, session: &Session) -> Value {
+    json!({
+        "role": "tool",
+        "tool_call_id": call_id,
+        "content": format!("{content}\n当前状态：\n{}", session.summary()),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::media::Metadata;
+    use std::path::Path;
+
+    fn test_session() -> Session {
+        let meta = Metadata {
+            duration_sec: 10.0,
+            width: 640,
+            height: 360,
+            fps: 30.0,
+            video_codec: "h264".into(),
+            has_audio: true,
+        };
+        // Session::new only resolves the path to absolute; no ffmpeg involved,
+        // so a fake filename is fine.
+        Session::new(Path::new("test.mp4"), meta).unwrap()
+    }
+
+    #[test]
+    fn tool_message_carries_fresh_state() {
+        let mut s = test_session();
+        // Still an empty timeline at turn start (what the old messages[0]
+        // snapshot would contain).
+        let stale = s.summary();
+        assert!(stale.contains("时间线：空"));
+
+        // After the first cut the Session has changed; the tool message must
+        // carry the new map.
+        let id = s.add_clip("asset_0", 0.0, 2.0).unwrap();
+        let msg = tool_message("call_1", "cut: 已追加", &s);
+        let content = msg.get("content").and_then(Value::as_str).unwrap();
+        assert!(
+            content.contains(&id),
+            "tool message must contain the new clip_id, got: {content}"
+        );
+        assert!(content.contains("当前状态："));
+        // The human-facing summary stays separate from the model content.
+        assert!(!"cut: 已追加".contains("当前状态"));
+    }
+
+    #[test]
+    fn endpoint_joins_without_double_slash() {
+        let endpoint = format!("{DEFAULT_BASE_URL}{CHAT_COMPLETIONS_PATH}");
+        assert!(!endpoint.contains("//chat"));
+        assert!(endpoint.ends_with("/chat/completions"));
+        assert_eq!(DEFAULT_MODEL, "deepseek-flash");
+    }
 }

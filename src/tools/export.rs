@@ -178,7 +178,11 @@ impl Tool for ExportTool {
             p.height,
             p.fps,
             p.quality.label(),
-            if p.include_audio { "保留音轨" } else { "移除音轨" },
+            if p.include_audio {
+                "保留音轨"
+            } else {
+                "移除音轨"
+            },
             p.out_path.display()
         ))
     }
@@ -221,10 +225,14 @@ impl Tool for ExportTool {
             ));
             if plan.include_audio {
                 if asset.meta.has_audio {
+                    let vf = match c.audio_volume_filter() {
+                        Some(f) => format!(",{f}"),
+                        None => String::new(),
+                    };
                     chains.push(format!(
                         "[{i}:a]aresample=48000,\
-                         aformat=sample_fmts=fltp:channel_layouts=stereo,\
-                         asetpts=PTS-STARTPTS[a{i}]"
+                         aformat=sample_fmts=fltp:channel_layouts=stereo\
+                         {vf},asetpts=PTS-STARTPTS[a{i}]"
                     ));
                 } else {
                     chains.push(format!(
@@ -430,7 +438,11 @@ mod tests {
         assert!(out.summary.starts_with("export: 已导出"));
 
         let path = session.outputs.last().unwrap();
-        assert!(Path::new(path).exists(), "输出文件不存在：{}", path.display());
+        assert!(
+            Path::new(path).exists(),
+            "输出文件不存在：{}",
+            path.display()
+        );
         let m = probe_path(Path::new(path)).await.unwrap();
         assert!(
             (m.duration_sec - 2.0).abs() < 0.3,

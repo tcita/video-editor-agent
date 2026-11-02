@@ -40,6 +40,16 @@ pub fn check_time(name: &str, v: f64) -> Result<()> {
     Ok(())
 }
 
+/// Volume gain in dB. Below -60dB is effectively inaudible; use mute instead.
+pub fn check_volume(name: &str, v: f64) -> Result<()> {
+    if !v.is_finite() || !(-60.0..=20.0).contains(&v) {
+        return Err(invalid(format!(
+            "{name} 须为 -60 至 +20 之间的有限数字（单位 dB，实际为 {v}）"
+        )));
+    }
+    Ok(())
+}
+
 pub fn check_id(name: &str, v: &str) -> Result<()> {
     let ok =
         !v.is_empty() && v.len() <= 40 && v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_');
@@ -95,16 +105,9 @@ pub fn output_path(outdir: &Path, raw_name: Option<&str>) -> Result<PathBuf> {
 
 /// Variant of [`output_path`] with an explicit extension (e.g. audio-only
 /// outputs). The extension is sanitized to ASCII alphanumerics.
-pub fn output_path_with_ext(
-    outdir: &Path,
-    raw_name: Option<&str>,
-    ext: &str,
-) -> Result<PathBuf> {
+pub fn output_path_with_ext(outdir: &Path, raw_name: Option<&str>, ext: &str) -> Result<PathBuf> {
     let ext = {
-        let e: String = ext
-            .chars()
-            .filter(|c| c.is_ascii_alphanumeric())
-            .collect();
+        let e: String = ext.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
         if e.is_empty() {
             "bin".to_string()
         } else {

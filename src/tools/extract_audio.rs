@@ -158,10 +158,14 @@ impl Tool for ExtractAudioTool {
                 .get(&c.asset_id)
                 .with_context(|| format!("素材缺失：{}", c.asset_id))?;
             if asset.meta.has_audio {
+                let vf = match c.audio_volume_filter() {
+                    Some(f) => format!(",{f}"),
+                    None => String::new(),
+                };
                 chains.push(format!(
                     "[{i}:a]aresample=48000,\
-                     aformat=sample_fmts=fltp:channel_layouts=stereo,\
-                     asetpts=PTS-STARTPTS[a{i}]"
+                     aformat=sample_fmts=fltp:channel_layouts=stereo\
+                     {vf},asetpts=PTS-STARTPTS[a{i}]"
                 ));
             } else {
                 chains.push(format!(

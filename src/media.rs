@@ -52,11 +52,37 @@ pub struct Clip {
     pub asset_id: String,
     pub start_sec: f64,
     pub end_sec: f64,
+    #[serde(default)]
+    pub muted: bool,
+    #[serde(default)]
+    pub volume_db: f64,
 }
 
 impl Clip {
     pub fn duration(&self) -> f64 {
         (self.end_sec - self.start_sec).max(0.0)
+    }
+
+    /// ffmpeg `volume` filter fragment. Default (unmuted, 0dB) returns None so
+    /// callers skip the filter entirely.
+    pub fn audio_volume_filter(&self) -> Option<String> {
+        if self.muted {
+            Some("volume=0".to_string())
+        } else if self.volume_db.abs() < f64::EPSILON {
+            None
+        } else {
+            Some(format!("volume={:.2}dB", self.volume_db))
+        }
+    }
+
+    pub fn audio_label(&self) -> String {
+        if self.muted {
+            "（静音）".to_string()
+        } else if self.volume_db.abs() < f64::EPSILON {
+            String::new()
+        } else {
+            format!("（{:+.1}dB）", self.volume_db)
+        }
     }
 }
 
@@ -115,7 +141,9 @@ pub async fn probe_path(input: &Path) -> Result<Metadata> {
         .arg(input)
         .output()
         .await
-        .context("ffprobe 执行失败（请确认 PATH 中包含 ffprobe，或将 ffprobe.exe 与本程序置于同一目录）")?;
+        .context(
+            "ffprobe 执行失败（请确认 PATH 中包含 ffprobe，或将 ffprobe.exe 与本程序置于同一目录）",
+        )?;
     anyhow::ensure!(
         out.status.success(),
         "ffprobe 执行失败：{}",
@@ -241,10 +269,36 @@ impl Session {
                 asset_id: asset_id.to_string(),
                 start_sec: start,
                 end_sec: end,
+                muted: false,
+                volume_db: 0.0,
             },
         );
         self.timeline.push(id.clone());
         Ok(id)
+    }
+
+    pub fn set_clip_muted(&mut self, clip_id: &str, muted: bool) -> Result<()> {
+        guard::check_id("clip_id", clip_id)?;
+        let clip = self
+            .clips
+            .get_mut(clip_id)
+            .with_context(|| format!("未知片段：{clip_id}"))?;
+        clip.muted = muted;
+        Ok(())
+    }
+
+    pub fn set_clip_volume(&mut self, clip_id: &str, db: f64) -> Result<()> {
+        guard::check_id("clip_id", clip_id)?;
+        guard::check_volume("db", db)?;
+        let clip = self
+            .clips
+            .get_mut(clip_id)
+            .with_context(|| format!("未知片段：{clip_id}"))?;
+        clip.volume_db = db;
+        // Setting volume unmutes: otherwise the model would need an extra
+        // unmute round trip.
+        clip.muted = false;
+        Ok(())
     }
 
     pub fn set_timeline(&mut self, ids: Vec<String>) -> Result<()> {
@@ -299,6 +353,8 @@ impl Session {
                 asset_id: src.asset_id.clone(),
                 start_sec: src.start_sec,
                 end_sec: mid,
+                muted: src.muted,
+                volume_db: src.volume_db,
             },
         );
         self.clips.insert(
@@ -308,9 +364,12 @@ impl Session {
                 asset_id: src.asset_id.clone(),
                 start_sec: mid,
                 end_sec: src.end_sec,
+                muted: src.muted,
+                volume_db: src.volume_db,
             },
         );
-        self.timeline.splice(pos..pos + 1, [first_id.clone(), second_id.clone()]);
+        self.timeline
+            .splice(pos..pos + 1, [first_id.clone(), second_id.clone()]);
         self.clips.remove(clip_id);
         Ok((first_id, second_id))
     }
@@ -379,8 +438,12 @@ impl Session {
                 .iter()
                 .map(|c| {
                     format!(
-                        "{}={}[{:.1}-{:.1}]",
-                        c.id, c.asset_id, c.start_sec, c.end_sec
+                        "{}={}[{:.1}-{:.1}]{}",
+                        c.id,
+                        c.asset_id,
+                        c.start_sec,
+                        c.end_sec,
+                        c.audio_label()
                     )
                 })
                 .collect();
@@ -404,5 +467,58 @@ impl Session {
             ));
         }
         lines.join("\n")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_session() -> Session {
+        let meta = Metadata {
+            duration_sec: 10.0,
+            width: 640,
+            height: 360,
+            fps: 30.0,
+            video_codec: "h264".into(),
+            has_audio: true,
+        };
+        // Session::new only resolves the path to absolute; no ffmpeg involved.
+        Session::new(Path::new("test.mp4"), meta).unwrap()
+    }
+
+    #[test]
+    fn mute_and_volume_flow() {
+        let mut s = test_session();
+        let id = s.add_clip("asset_0", 0.0, 2.0).unwrap();
+        assert!(s.clips[&id].audio_volume_filter().is_none());
+
+        s.set_clip_muted(&id, true).unwrap();
+        assert_eq!(
+            s.clips[&id].audio_volume_filter().as_deref(),
+            Some("volume=0")
+        );
+        assert!(s.summary().contains("（静音）"));
+
+        // Setting volume unmutes automatically.
+        s.set_clip_volume(&id, -6.0).unwrap();
+        assert!(!s.clips[&id].muted);
+        assert_eq!(s.clips[&id].volume_db, -6.0);
+        assert!(s.summary().contains("-6.0dB"));
+
+        // split inherits the audio state.
+        let (a, b) = s.split_clip(&id, 1.0).unwrap();
+        assert_eq!(s.clips[&a].volume_db, -6.0);
+        assert_eq!(s.clips[&b].volume_db, -6.0);
+    }
+
+    #[test]
+    fn volume_range_rejected() {
+        let mut s = test_session();
+        let id = s.add_clip("asset_0", 0.0, 1.0).unwrap();
+        assert!(s.set_clip_volume(&id, f64::NAN).is_err());
+        assert!(s.set_clip_volume(&id, -61.0).is_err());
+        assert!(s.set_clip_volume(&id, 21.0).is_err());
+        assert!(s.set_clip_volume("clip_999", -6.0).is_err());
     }
 }
