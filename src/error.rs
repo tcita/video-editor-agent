@@ -47,10 +47,10 @@ pub fn fatal(message: impl Into<String>) -> AnyError {
 
 /// Canonical format for argument errors: which field is wrong, what the model
 /// sent, and how to fix it. This text is the model's only way to self-correct,
-/// so the format needs to stay stable.
+/// so the format needs to stay stable. User/LLM-facing, so Chinese.
 pub fn invalid_args(tool: &str, issue: impl AsRef<str>, args: &Value) -> AnyError {
     invalid(format!(
-        "Invalid arguments for tool \"{tool}\":\n- {}\n\nArguments provided:\n{}\n\nUpdate the arguments and call the tool again.",
+        "工具 \"{tool}\" 参数不合法：\n- {}\n\n实际传入的参数：\n{}\n\n请修正参数后重新调用该工具。",
         issue.as_ref(),
         serde_json::to_string_pretty(args).unwrap_or_else(|_| args.to_string())
     ))

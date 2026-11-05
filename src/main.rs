@@ -49,7 +49,7 @@ fn get_key() -> Result<String> {
             "[Environment]::GetEnvironmentVariable('deepseek_key','User')",
         ])
         .output()
-        .context("读取用户级环境变量 deepseek_key 失败")?;
+        .context("read user-level env deepseek_key failed")?;
     let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
     anyhow::ensure!(
         !v.is_empty(),
@@ -58,9 +58,9 @@ fn get_key() -> Result<String> {
     Ok(v)
 }
 
-struct CliHost;
+struct OneShotHost;
 
-impl AgentHost for CliHost {
+impl AgentHost for OneShotHost {
     fn log(&self, msg: String) {
         println!("{msg}");
     }
@@ -133,7 +133,7 @@ async fn main() -> Result<()> {
     if let Some(path) = log.path() {
         println!("[log] {}", path.display());
     }
-    let client = LlmClient::from_env(key, Arc::clone(&log))?;
+    let mut client = LlmClient::from_env(key, Arc::clone(&log))?;
     let registry = tools::standard_registry();
 
     // Record how the process was started; each turn logs its own PROMPT.
@@ -149,10 +149,12 @@ async fn main() -> Result<()> {
     );
 
     let Some(request) = prompt else {
+        // TUI owns the screen; stderr raw dumps are invisible, log file only.
+        client.set_debug_stderr(false);
         return tui::run(session, client, registry, log).await;
     };
 
-    let host = CliHost;
+    let host = OneShotHost;
     let result = agent::run_turn(&client, &registry, &host, &mut session, &request, &log).await;
     // run_turn logs FINAL on the success path; only the errors it cannot hand
     // back need recording here.

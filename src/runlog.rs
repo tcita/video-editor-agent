@@ -75,7 +75,7 @@ fn truncate(s: &str, max: usize) -> String {
         return s.to_string();
     }
     let head: String = s.chars().take(max).collect();
-    format!("{head}…（截断）")
+    format!("{head}…(truncated)")
 }
 
 fn epoch() -> u64 {

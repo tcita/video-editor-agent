@@ -132,7 +132,7 @@ impl Tool for ExtractAudioTool {
     async fn run(&self, session: &mut Session, args: Value) -> Result<ToolOutcome> {
         let (_, plan) = Self::parse(session, &args)?;
         std::fs::create_dir_all(&session.outdir)
-            .with_context(|| format!("创建输出目录失败：{}", session.outdir.display()))?;
+            .with_context(|| format!("create output dir failed: {}", session.outdir.display()))?;
 
         let n = plan.clips.len();
         let mut cmd = Command::new(ffmpeg_bin());
@@ -142,7 +142,7 @@ impl Tool for ExtractAudioTool {
             let asset = session
                 .assets
                 .get(&c.asset_id)
-                .with_context(|| format!("素材缺失：{}", c.asset_id))?;
+                .with_context(|| format!("asset missing: {}", c.asset_id))?;
             cmd.arg("-ss")
                 .arg(format!("{:.3}", c.start_sec))
                 .arg("-t")
@@ -156,7 +156,7 @@ impl Tool for ExtractAudioTool {
             let asset = session
                 .assets
                 .get(&c.asset_id)
-                .with_context(|| format!("素材缺失：{}", c.asset_id))?;
+                .with_context(|| format!("asset missing: {}", c.asset_id))?;
             if asset.meta.has_audio {
                 let vf = match c.audio_volume_filter() {
                     Some(f) => format!(",{f}"),
@@ -205,16 +205,16 @@ impl Tool for ExtractAudioTool {
             .stdout(Stdio::null())
             .stderr(Stdio::piped());
 
-        let out = cmd.output().await.context("启动 ffmpeg 失败")?;
+        let out = cmd.output().await.context("spawn ffmpeg failed")?;
         if !out.status.success() {
             return Err(fatal(format!(
-                "ffmpeg 执行失败：\n{}",
+                "ffmpeg failed:\n{}",
                 String::from_utf8_lossy(&out.stderr)
             )));
         }
         if !plan.out_path.exists() {
             return Err(fatal(format!(
-                "ffmpeg 返回成功，但未生成文件：{}",
+                "ffmpeg exited successfully but produced no file: {}",
                 plan.out_path.display()
             )));
         }

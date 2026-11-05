@@ -87,7 +87,7 @@ impl ExportTool {
             clips.push(c.clone());
         }
 
-        let first = session.assets.get(&clips[0].asset_id).context("素材缺失")?;
+        let first = session.assets.get(&clips[0].asset_id).context("asset missing")?;
 
         let (mut width, mut height) = match a.resolution.as_deref() {
             Some(r) => guard::parse_resolution(r)?,
@@ -190,7 +190,7 @@ impl Tool for ExportTool {
     async fn run(&self, session: &mut Session, args: Value) -> Result<ToolOutcome> {
         let (_, plan) = Self::parse(session, &args)?;
         std::fs::create_dir_all(&session.outdir)
-            .with_context(|| format!("创建输出目录失败：{}", session.outdir.display()))?;
+            .with_context(|| format!("create output dir failed: {}", session.outdir.display()))?;
 
         let n = plan.clips.len();
         let mut cmd = Command::new(ffmpeg_bin());
@@ -200,7 +200,7 @@ impl Tool for ExportTool {
             let asset = session
                 .assets
                 .get(&c.asset_id)
-                .with_context(|| format!("素材缺失：{}", c.asset_id))?;
+                .with_context(|| format!("asset missing: {}", c.asset_id))?;
             cmd.arg("-ss")
                 .arg(format!("{:.3}", c.start_sec))
                 .arg("-t")
@@ -214,7 +214,7 @@ impl Tool for ExportTool {
             let asset = session
                 .assets
                 .get(&c.asset_id)
-                .with_context(|| format!("素材缺失：{}", c.asset_id))?;
+                .with_context(|| format!("asset missing: {}", c.asset_id))?;
             chains.push(format!(
                 "[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,\
                  pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,\
@@ -290,18 +290,18 @@ impl Tool for ExportTool {
             .stdout(Stdio::null())
             .stderr(Stdio::piped());
 
-        let out = cmd.output().await.context("启动 ffmpeg 失败")?;
+        let out = cmd.output().await.context("spawn ffmpeg failed")?;
         if !out.status.success() {
             // Environment-level failure: retrying with different arguments is
             // pointless.
             return Err(fatal(format!(
-                "ffmpeg 执行失败：\n{}",
+                "ffmpeg failed:\n{}",
                 ffmpeg_error(&out.stderr)
             )));
         }
         if !plan.out_path.exists() {
             return Err(fatal(format!(
-                "ffmpeg 返回成功，但未生成文件：{}",
+                "ffmpeg exited successfully but produced no file: {}",
                 plan.out_path.display()
             )));
         }
@@ -440,13 +440,13 @@ mod tests {
         let path = session.outputs.last().unwrap();
         assert!(
             Path::new(path).exists(),
-            "输出文件不存在：{}",
+            "output file missing: {}",
             path.display()
         );
         let m = probe_path(Path::new(path)).await.unwrap();
         assert!(
             (m.duration_sec - 2.0).abs() < 0.3,
-            "时长异常：{}",
+            "duration mismatch: {}",
             m.duration_sec
         );
         assert_eq!(m.width, 320);

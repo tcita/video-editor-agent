@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use tokio::process::Command;
 
@@ -142,15 +142,15 @@ pub async fn probe_path(input: &Path) -> Result<Metadata> {
         .output()
         .await
         .context(
-            "ffprobe 执行失败（请确认 PATH 中包含 ffprobe，或将 ffprobe.exe 与本程序置于同一目录）",
+            "spawn ffprobe failed (ensure ffprobe is in PATH or next to this binary)",
         )?;
     anyhow::ensure!(
         out.status.success(),
-        "ffprobe 执行失败：{}",
+        "ffprobe failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
     let parsed: FfprobeOut =
-        serde_json::from_slice(&out.stdout).context("ffprobe 输出的 JSON 解析失败")?;
+        serde_json::from_slice(&out.stdout).context("ffprobe output is not valid JSON")?;
 
     let duration_sec = parsed
         .format
@@ -191,7 +191,7 @@ impl Session {
         // `absolute` rather than `canonicalize`: the latter adds a `\\?\` prefix
         // on Windows. ffmpeg copes with it, but it is ugly in logs and previews.
         let input = std::path::absolute(input)
-            .with_context(|| format!("解析输入路径失败：{}", input.display()))?;
+            .with_context(|| format!("resolve input path failed: {}", input.display()))?;
         let workdir = input
             .parent()
             .unwrap_or_else(|| Path::new("."))
@@ -312,6 +312,26 @@ impl Session {
             guard::check_id("clip_id", id)?;
             if !self.clips.contains_key(id) {
                 return Err(invalid(format!("未知片段：{id}")));
+            }
+        }
+        // Each timeline slot owns its clip: duplicates would dangle after a
+        // later split (position replaces the first hit, remove drops the
+        // shared entry) and would couple mute/volume edits across slots.
+        // Repeat playback needs a fresh cut instead.
+        {
+            let mut seen = HashSet::new();
+            let mut dupes = Vec::new();
+            for id in &ids {
+                if !seen.insert(id) && !dupes.contains(&id) {
+                    dupes.push(id);
+                }
+            }
+            if !dupes.is_empty() {
+                let list: Vec<String> = dupes.iter().map(|s| s.to_string()).collect();
+                return Err(invalid(format!(
+                    "clip_ids 存在重复引用：{}。同一片段不可在时间线中出现多次，如需重复播放请再 cut 一段",
+                    list.join(", ")
+                )));
             }
         }
         self.timeline = ids;
@@ -520,5 +540,20 @@ mod tests {
         assert!(s.set_clip_volume(&id, -61.0).is_err());
         assert!(s.set_clip_volume(&id, 21.0).is_err());
         assert!(s.set_clip_volume("clip_999", -6.0).is_err());
+    }
+
+    #[test]
+    fn timeline_rejects_duplicate_clip() {
+        let mut s = test_session();
+        let a = s.add_clip("asset_0", 0.0, 1.0).unwrap();
+        let b = s.add_clip("asset_0", 1.0, 2.0).unwrap();
+        // Normal reorder passes.
+        s.set_timeline(vec![b.clone(), a.clone()]).unwrap();
+        // Duplicates fail with a retryable hint, and the old order survives.
+        let err = s
+            .set_timeline(vec![a.clone(), a.clone()])
+            .expect_err("duplicate clip_ids must be rejected");
+        assert!(err.to_string().contains(&a));
+        assert_eq!(s.timeline, vec![b, a]);
     }
 }

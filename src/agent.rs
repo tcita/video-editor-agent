@@ -27,6 +27,10 @@ pub struct LlmClient {
     http_client: reqwest::Client,
     /// Used to persist raw model responses when `VIDEO_AGENT_DEBUG` is set.
     log: Arc<RunLog>,
+    /// Whether `VIDEO_AGENT_DEBUG` also writes to stderr. TUI runs on an
+    /// alternate screen so stderr is invisible (and flickers); one-shot
+    /// keeps it for direct inspection.
+    debug_stderr: bool,
 }
 
 impl LlmClient {
@@ -43,14 +47,20 @@ impl LlmClient {
         let http_client = reqwest::Client::builder()
             .timeout(Duration::from_secs(180))
             .build()
-            .context("初始化 HTTP 客户端失败")?;
+            .context("init HTTP client failed")?;
         Ok(Self {
             endpoint,
             key,
             model,
             http_client,
             log,
+            debug_stderr: true,
         })
+    }
+
+    /// TUI calls this with `false`: raw responses go to the run log only.
+    pub fn set_debug_stderr(&mut self, v: bool) {
+        self.debug_stderr = v;
     }
 
     pub fn model(&self) -> &str {
@@ -78,20 +88,22 @@ impl LlmClient {
             .json(&body)
             .send()
             .await
-            .context("请求模型失败")?;
+            .context("request model failed")?;
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
         if std::env::var("VIDEO_AGENT_DEBUG").is_ok() {
-            eprintln!("--- model raw ---\n{text}\n--- end raw ---");
+            if self.debug_stderr {
+                eprintln!("--- model raw ---\n{text}\n--- end raw ---");
+            }
             self.log.line("RAW", &text);
         }
         if !status.is_success() {
-            bail!("模型接口 {status}: {}", truncate(&text, 2000));
+            bail!("model API {status}: {}", truncate(&text, 2000));
         }
-        let v: Value = serde_json::from_str(&text).context("模型响应不是合法 JSON")?;
+        let v: Value = serde_json::from_str(&text).context("model response is not valid JSON")?;
         v.pointer("/choices/0/message")
             .cloned()
-            .with_context(|| format!("模型响应缺少 choices[0].message: {}", truncate(&text, 1000)))
+            .with_context(|| format!("model response missing choices[0].message: {}", truncate(&text, 1000)))
     }
 }
 
