@@ -7,7 +7,7 @@ use crate::error::InvalidArg;
 use crate::guard::{max_tool_steps, MAX_ARGS_BYTES};
 use crate::media::Session;
 use crate::runlog::RunLog;
-use crate::tool::{ToolContext, ToolRegistry};
+use crate::tool::{ToolContext, ToolOutcome, ToolRegistry};
 
 pub trait AgentHost: Send + Sync {
     fn log(&self, msg: String);
@@ -336,7 +336,7 @@ async fn run_one(
     name: &str,
     args_str: &str,
     log: &RunLog,
-) -> Result<crate::tool::ToolOutcome> {
+) -> Result<ToolOutcome> {
     if args_str.len() > MAX_ARGS_BYTES {
         return Err(crate::error::invalid(format!(
             "参数过长（实际为 {} 字节，上限为 {MAX_ARGS_BYTES} 字节）",
@@ -356,7 +356,7 @@ async fn run_one(
             "{name} 的参数必须是 JSON 对象"
         )));
     }
-    let mut ctx = ToolContext { session, host, log };
+    let mut ctx: ToolContext<'_> = ToolContext { session, host, log };
     registry.dispatch(&mut ctx, name, args).await
 }
 

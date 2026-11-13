@@ -234,7 +234,7 @@ async fn event_loop(
 
                             let session = Arc::clone(&session);
                             let client = Arc::clone(&client);
-                            let registry = Arc::clone(&registry);
+                            let registry: Arc<ToolRegistry> = Arc::clone(&registry);
                             let host = Arc::clone(&host);
                             let log = Arc::clone(&log);
                             tokio::spawn(async move {
